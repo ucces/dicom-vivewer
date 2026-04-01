@@ -1,0 +1,222 @@
+<template>
+  <div class="dicom-viewer">
+    <!-- DICOM影像渲染视口 -->
+    <div 
+      ref="viewport" 
+      class="dicom-viewport"
+      @contextmenu.prevent
+    ></div>
+
+    <!-- 帧播放/切换控制条（对应你代码里的LwImageSwitch） -->
+    <div class="image-control">
+      <van-slider 
+        v-model="currentIndex" 
+        :min="1" 
+        :max="imageIds.length"
+        :disabled="imageIds.length <= 1"
+        @change="onSliderChange"
+      />
+      <div class="control-row">
+        <div class="control-btn">
+          <button @click="prevImage" :disabled="currentIndex <= 1">上一帧</button>
+          <button @click="togglePlay">{{ isPlaying ? '暂停' : '播放' }}</button>
+          <button @click="nextImage" :disabled="currentIndex >= imageIds.length">下一帧</button>
+        </div>
+        <span class="index-text">{{ currentIndex }} / {{ imageIds.length }}</span>
+      </div>
+    </div>
+
+    <!-- 阅片工具栏（对应你代码里的LwToolbar） -->
+    <div class="toolbar">
+      <button @click="setToolActive('Wwwc')" :class="{ active: activeTool === 'Wwwc' }">窗宽窗位</button>
+      <button @click="setToolActive('Zoom')" :class="{ active: activeTool === 'Zoom' }">缩放</button>
+      <button @click="setToolActive('Pan')" :class="{ active: activeTool === 'Pan' }">平移</button>
+      <button @click="setToolActive('Length')" :class="{ active: activeTool === 'Length' }">长度测量</button>
+      <button @click="setToolActive('Angle')" :class="{ active: activeTool === 'Angle' }">角度测量</button>
+      <button @click="setToolActive('EllipticalRoi')" :class="{ active: activeTool === 'EllipticalRoi' }">ROI测量</button>
+      <button @click="resetViewport">重置</button>
+    </div>
+  </div>
+</template>
+
+<script>
+import * as cornerstone from 'cornerstone-core'
+import * as cornerstoneTools from 'cornerstone-tools'
+
+export default {
+  name: 'DicomViewer',
+  data() {
+    return {
+      // ========== 核心：DICOM影像地址列表（WADO-URI格式） ==========
+      imageIds: [
+        // 测试用公共DICOM地址，可直接使用；生产环境替换为你的DICOM服务器地址
+        'wadouri:https://raw.githubusercontent.com/cornerstonejs/cornerstoneWADOImageLoader/master/testImages/CT2/1.dcm',
+        'wadouri:https://raw.githubusercontent.com/cornerstonejs/cornerstoneWADOImageLoader/master/testImages/CT2/2.dcm',
+        'wadouri:https://raw.githubusercontent.com/cornerstonejs/cornerstoneWADOImageLoader/master/testImages/CT2/3.dcm',
+        'wadouri:https://raw.githubusercontent.com/cornerstonejs/cornerstoneWADOImageLoader/master/testImages/CT2/4.dcm',
+        'wadouri:https://raw.githubusercontent.com/cornerstonejs/cornerstoneWADOImageLoader/master/testImages/CT2/5.dcm',
+      ],
+      currentIndex: 1,
+      isPlaying: false,
+      playTimer: null,
+      activeTool: 'StackScroll',
+      element: null, // 视口DOM元素
+    }
+  },
+  mounted() {
+    this.initViewport()
+  },
+  beforeDestroy() {
+    // 销毁前释放资源，避免内存泄漏
+    this.stopPlay()
+    if (this.element) cornerstone.disable(this.element)
+  },
+  methods: {
+    // 初始化影像视口
+    async initViewport() {
+      this.element = this.$refs.viewport
+      // 启用cornerstone渲染
+      cornerstone.enable(this.element)
+      
+      // 构建序列栈
+      const stack = {
+        currentImageIdIndex: 0,
+        imageIds: this.imageIds
+      }
+      
+      // 加载并显示第一帧影像
+      const firstImage = await cornerstone.loadImage(this.imageIds[0])
+      cornerstone.displayImage(this.element, firstImage)
+      
+      // 绑定序列状态管理
+      cornerstoneTools.addStackStateManager(this.element, ['stack'])
+      cornerstoneTools.addToolState(this.element, 'stack', stack)
+      
+      // 开启影像预加载，提升播放流畅度
+      cornerstoneTools.stackPrefetch.enable(this.element)
+    },
+
+    // 滑块切换影像帧
+    onSliderChange(val) {
+      const index = val - 1
+      cornerstoneTools.scrollToIndex(this.element, index)
+      this.currentIndex = val
+    },
+
+    // 上一帧
+    prevImage() {
+      if (this.currentIndex <= 1) return
+      this.currentIndex--
+      this.onSliderChange(this.currentIndex)
+    },
+
+    // 下一帧
+    nextImage() {
+      if (this.currentIndex >= this.imageIds.length) return
+      this.currentIndex++
+      this.onSliderChange(this.currentIndex)
+    },
+
+    // 播放/暂停切换
+    togglePlay() {
+      this.isPlaying = !this.isPlaying
+      this.isPlaying ? this.startPlay() : this.stopPlay()
+    },
+
+    // 开始循环播放
+    startPlay() {
+      // 播放帧率100ms/帧，可根据需求调整
+      this.playTimer = setInterval(() => {
+        this.currentIndex >= this.imageIds.length 
+          ? this.currentIndex = 1 
+          : this.currentIndex++
+        this.onSliderChange(this.currentIndex)
+      }, 100)
+    },
+
+    // 停止播放
+    stopPlay() {
+      clearInterval(this.playTimer)
+      this.playTimer = null
+    },
+
+    // 切换激活的阅片工具
+    setToolActive(toolName) {
+      // 先禁用所有工具
+      const allTools = ['StackScroll', 'Wwwc', 'Zoom', 'Pan', 'Length', 'Angle', 'EllipticalRoi']
+      allTools.forEach(tool => cornerstoneTools.setToolDisabled(tool))
+      
+      // 激活选中的工具，mouseButtonMask:1 代表鼠标左键触发
+      cornerstoneTools.setToolActive(toolName, { mouseButtonMask: 1 })
+      this.activeTool = toolName
+    },
+
+    // 重置视口（缩放/平移/窗宽窗位全部重置）
+    resetViewport() {
+      cornerstone.reset(this.element)
+      // 重置为默认翻页工具
+      this.setToolActive('StackScroll')
+    }
+  }
+}
+</script>
+
+<style scoped>
+.dicom-viewer {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  color: #fff;
+  overflow: hidden;
+}
+.dicom-viewport {
+  flex: 1;
+  width: 100%;
+  position: relative;
+}
+.image-control {
+  padding: 10px 20px;
+  background: #1a1a1a;
+}
+.control-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+}
+.control-btn {
+  display: flex;
+  gap: 10px;
+}
+.index-text {
+  font-size: 14px;
+  color: #ccc;
+}
+.toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  background: #1a1a1a;
+  overflow-x: auto;
+}
+button {
+  padding: 6px 12px;
+  background: #333;
+  border: 1px solid #555;
+  color: #fff;
+  border-radius: 4px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+button.active {
+  background: #fabe00;
+  color: #000;
+  border-color: #fabe00;
+}
+</style>
