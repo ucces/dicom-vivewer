@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>DICOM医学影像阅片系统</title>
+  <!-- 引入核心依赖CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.7.14/dist/vue.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vant@2.12.54/lib/vant.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vant@2.12.54/lib/index.css">
+  <script src="https://cdn.jsdelivr.net/npm/cornerstone-core@2.6.1/dist/cornerstone.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cornerstone-tools@6.0.10/dist/cornerstoneTools.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cornerstone-wado-image-loader@4.13.2/dist/cornerstoneWADOImageLoader.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dicom-parser@1.8.21/dist/dicomParser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; color: #fff; }
+    #app { width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script>
+    // 补全webpack运行环境，让你的代码能正常加载
+    window.webpackJsonp = window.webpackJsonp || [];
+    // 注册UI组件
+    Vue.use(vant);
+    // 初始化影像渲染引擎
+    cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
+    cornerstoneWADOImageLoader.external.dicomParser = dicomParser;
+    cornerstoneTools.external.cornerstone = cornerstone;
+    cornerstoneTools.external.Hammer = Hammer;
+    cornerstoneTools.init({ showSVGCursors: false });
+  </script>
+
+  <!-- 加载你提供的chunk代码 -->
+  <script src="./chunk-a03e4f26.js"></script>
+
+  <script>
+    // 挂载程序主界面
+    new Vue({
+      el: '#app',
+      template: `<dicom-layout />`,
+      components: {
+        'dicom-layout': () => Promise.resolve(window.webpackJsonp[0][1]["8883"].default)
+      },
+      created() {
+        console.log('阅片系统加载完成')
+      }
+    })
+  </script>
+</body>
+</html>
