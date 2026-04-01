@@ -1,0 +1,77 @@
+import Vue from 'vue'
+import App from './App.vue'
+import Vant from 'vant'
+import 'vant/lib/index.css'
+// DICOM核心库引入
+import * as cornerstone from 'cornerstone-core'
+import * as cornerstoneTools from 'cornerstone-tools'
+import * as cornerstoneWADOImageLoader from 'cornerstone-wado-image-loader'
+import * as dicomParser from 'dicom-parser'
+import * as cornerstoneMath from 'cornerstone-math'
+import Hammer from 'hammerjs'
+
+Vue.use(Vant)
+Vue.config.productionTip = false
+
+// ========== Cornerstone全局初始化（核心必做） ==========
+// 1. 绑定外部依赖
+cornerstoneWADOImageLoader.external.cornerstone = cornerstone
+cornerstoneWADOImageLoader.external.dicomParser = dicomParser
+cornerstoneTools.external.cornerstone = cornerstone
+cornerstoneTools.external.Hammer = Hammer
+cornerstoneTools.external.cornerstoneMath = cornerstoneMath
+
+// 2. 配置Web Worker（DICOM影像解码必须）
+cornerstoneWADOImageLoader.webWorkerManager.initialize({
+  maxWebWorkers: Math.floor(navigator.hardwareConcurrency / 2) || 1,
+  startWebWorkersOnDemand: true,
+  taskConfiguration: {
+    decodeTask: {
+      initializeCodecsOnStartup: false,
+      strict: false
+    }
+  }
+})
+
+// 3. 配置DICOM请求拦截（添加鉴权token）
+cornerstoneWADOImageLoader.configure({
+  beforeSend: function (xhr) {
+    // 替换为你的业务鉴权逻辑，比如从localStorage取token
+    const token = localStorage.getItem('token')
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+  }
+})
+
+// 4. 初始化工具库
+cornerstoneTools.init({
+  globalToolSyncEnabled: true,
+  showSVGCursors: false
+})
+// 配置工具颜色
+cornerstoneTools.toolColors.setToolColor('#fabe00')
+cornerstoneTools.toolColors.setActiveColor('#00ff00')
+
+// 5. 注册阅片工具（对应你代码里的测量、窗宽窗位等能力）
+const toolList = [
+  cornerstoneTools.StackScrollTool,
+  cornerstoneTools.StackScrollMouseWheelTool,
+  cornerstoneTools.WwwcTool,
+  cornerstoneTools.ZoomTool,
+  cornerstoneTools.PanTool,
+  cornerstoneTools.LengthTool,
+  cornerstoneTools.AngleTool,
+  cornerstoneTools.EllipticalRoiTool,
+  cornerstoneTools.ProbeTool,
+  cornerstoneTools.RotateTool,
+  cornerstoneTools.MagnifyTool
+]
+toolList.forEach(Tool => cornerstoneTools.addTool(Tool))
+
+// 6. 激活默认工具（滚轮翻页、鼠标拖动翻页）
+cornerstoneTools.setToolActive('StackScrollMouseWheel', {})
+cornerstoneTools.setToolActive('StackScroll', { mouseButtonMask: 1 })
+
+// 挂载Vue实例
+new Vue({
+  render: h => h(App),
+}).$mount('#app')
